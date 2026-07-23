@@ -1,0 +1,1271 @@
+jQuery(document).ready(function ($) {
+    if (!$('#poilive2d-hourly-validation-style').length) {
+        $('head').append(
+            '<style id="poilive2d-hourly-validation-style">' +
+            '.poilive2d-input-error{' +
+            'border-color:#d63638!important;' +
+            'box-shadow:0 0 0 1px #d63638!important;' +
+            '}' +
+            '</style>'
+        );
+    }
+
+    // ==========================================
+    // 0. 切换标签页的智能记忆逻辑
+    // ==========================================
+
+    var activeTab = localStorage.getItem('poilive2d_active_tab') || 'basic';
+
+    // 先用 jQuery 维持住当前页面的物理显示（防止等下面样式拔掉时发生闪烁）
+    $('#tab-' + activeTab).show();
+
+    // 核心：成功接管！立刻拔掉内联的临时 !important 样式，将隐藏/显示的控制权彻底还给 jQuery
+    $('#poilive2d-pre-render-style').remove();
+
+    // 此时新页面已经完全可见，高度100%准备就绪，立刻自适应撑开多行文本框
+    $('#tab-' + activeTab).find('textarea').each(function () {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight + 2) + 'px';
+    });
+
+    $('.poilive2d-tab-link').on('click', function (e) {
+
+        e.preventDefault();
+        if ($(this).hasClass('nav-tab-active')) return;
+
+        $('.poilive2d-tab-link').removeClass('nav-tab-active');
+        $(this).addClass('nav-tab-active');
+
+        var targetTab = $(this).data('tab');
+        var $currentContent = $('.poilive2d-tab-content:visible');
+        var $newContent = $('#tab-' + targetTab);
+
+        localStorage.setItem('poilive2d_active_tab', targetTab);
+
+        checkPreviewVisibility();
+
+        // 平滑的淡出淡入
+        $currentContent.fadeOut(150, function () {
+            $newContent.fadeIn(150, function () {
+                // 面板展现后，如果 PHP 已经给了具体高度，就不再去重新撑开它，避免闪烁
+                $(this).find('textarea').each(function () {
+                    if (this.style.height === 'auto' || !this.style.height) {
+                        this.style.height = 'auto';
+                        this.style.height = (this.scrollHeight + 2) + 'px';
+                    }
+                });
+            });
+        });
+    });
+
+    // ==========================================
+    // 1. 基础 UI 初始化 (新增取色器实时监听)
+    // ==========================================
+    if (typeof $.fn.wpColorPicker === 'function') {
+        $('.color-picker').wpColorPicker({
+            change: function (event, ui) {
+                // 拖动取色棒时实时触发
+                setTimeout(updateLivePreview, 10);
+            },
+            clear: function () {
+                // 点击清空按钮时触发
+                setTimeout(updateLivePreview, 10);
+            }
+        });
+    }
+
+    // ==========================================
+    // ⭐ 实时预览面板渲染引擎 (已修复切换显隐与顶边距漏洞)
+    // ==========================================
+    function updateLivePreview() {
+        // --- 1. 抓取【气泡】相关表单值 ---
+        var bW = $('input[name="poilive2d_options[bubble_size][w]"]').val() || 'auto';
+        var bH = $('input[name="poilive2d_options[bubble_size][h]"]').val() || 'auto';
+        var bFont = $('#bubble_font_size').val() || 15;
+        var rH = 250;
+        var bYOffset = parseInt($('#bubble_y_offset').val(), 10) || 0;
+        var bBottom = (rH - 50) + bYOffset;
+        var bBg = $('#bubble_bg_color').val() || 'rgba(250, 248, 247, 0.9)';
+        var bBorder = $('#bubble_border_color').val() || 'rgba(102,204,255,.4)';
+        var bShadow = $('#bubble_shadow_color').val() || 'rgba(102,204,255,.4)';
+        var bColor = $('#bubble_text_color').val() || '#02111d';
+        var bHighlight = $('#bubble_highlight_color').val() || '#0099cc';
+
+        // --- 2. 抓取【按钮】相关表单值 ---
+        var btnW = $('#btn_size_w').val() || 60;
+        var btnH = $('#btn_size_h').val() || 20;
+        var btnGap = $('#btn_gap').val() || 5;
+        var btnFontSize = $('#btn_font_size').val() || 12;
+        var btnYOffset = parseInt($('#btn_y_offset').val(), 10) || 0;
+        var btnTop = 64 - btnYOffset;
+        var btnBg = $('#btn_color').val() || 'rgba(0, 0, 0, 0.2)';
+        var btnHover = $('#btn_hover_color').val() || '#f4f6f8';
+        var btnTextColor = $('#btn_text_color').val() || '#02111d';
+        var btnBorderColor = $('#btn_border_color').val() || 'rgba(102,204,255,.4)';
+        var btnShadowColor = $('#btn_shadow_color').val() || 'rgba(102,204,255,.4)';
+
+        // --- 3. 抓取【贴边布局】表单值 ---
+        var rDock = $('#role_dock').val() || 'left';
+
+        // --- 4. 生成动态隔离的 CSS ---
+        var previewCss = '';
+
+        // [气泡样式]
+        var bubbleW = (bW === 'auto' || bW == 0) ? '300px' : bW + 'px';
+        var bubbleH = (bH === 'auto' || bH == 0) ? 'auto' : bH + 'px';
+        previewCss += '.preview-message { ' +
+            'width: ' + bubbleW + ' !important; ' +
+            'height: ' + bubbleH + ' !important; ' +
+            'font-size: ' + bFont + 'px !important; ' +
+            'bottom: ' + bBottom + 'px !important; ' +
+            'background-color: ' + bBg + ' !important; ' +
+            'border: 1px solid ' + bBorder + ' !important; ' +
+            'box-shadow: 0 3px 15px 2px ' + bShadow + ' !important; ' +
+            'color: ' + bColor + ' !important; ' +
+            '}';
+
+        previewCss += '.preview-highlight { ' +
+            'color: ' + bHighlight + ' !important; ' +
+            'font-weight: bold !important; ' + // 如果你的高亮是加粗的，保留这行
+            '}';
+        
+        var realPreviewTop = parseInt(btnTop) + 100   ;
+        // [菜单与工具栏占位避让 - 修复：增大边距使按钮整体内移，并注入动态 top 顶边距]
+        if (rDock === 'right') {
+            previewCss += '.preview-menu-right { right: auto !important; left: 40px !important; top: ' + realPreviewTop + 'px !important; }';
+            previewCss += '.preview-corner-tools { right: auto !important; left: 40px !important; }';
+        } else {
+            previewCss += '.preview-menu-right { left: auto !important; right: 40px !important; top: ' + realPreviewTop + 'px !important; }';
+            previewCss += '.preview-corner-tools { left: auto !important; right: 40px    !important; }';
+        }
+        previewCss += '.preview-menu-left, .preview-menu-right { gap: ' + btnGap + 'px !important; }';
+
+        // [主按钮样式]
+        previewCss += '.preview-action { ' +
+
+            'width: ' + btnW + 'px !important; ' +
+
+            'height: ' + btnH + 'px !important; ' +
+
+            'min-height: ' + btnH + 'px !important; ' +
+
+            'line-height: ' + btnH + 'px !important; ' +
+
+            'font-size: ' + btnFontSize + 'px !important; ' +
+
+            'box-sizing: border-box !important; ' +
+
+            'background: ' + btnBg + ' !important; ' +
+
+            'border: 1px solid ' + btnBorderColor + ' !important; ' +
+
+            'box-shadow: 0 3px 15px 2px ' + btnShadowColor + ' !important; ' +
+
+            'color: ' + btnTextColor + ' !important; ' +
+
+            '}';
+
+        // [角落工具栏按钮样式]
+        previewCss += '.preview-corner-btn { ' +
+
+            'width: ' +  '22px !important; ' +
+
+            'height: ' +  '22px !important; ' +
+
+            'min-height: ' + btnH + 'px !important; ' +
+
+            'line-height: ' + btnH + 'px !important; ' +
+
+            'font-size: ' + '13px !important; ' +
+
+            'box-sizing: border-box !important; ' +
+
+            'background: ' + btnBg + ' !important; ' +
+
+            'border: 1px solid ' + btnBorderColor + ' !important; ' +
+
+            'box-shadow: 0 3px 6px ' + btnShadowColor + ' !important; ' +
+
+            'color: ' + btnTextColor + ' !important; ' +
+
+            '}';
+
+        // [鼠标悬浮样式]
+        previewCss += '.preview-action:hover, .preview-corner-btn:hover { ' +
+            'background: ' + btnHover + ' !important; ' +
+            'border-color: ' + btnBorderColor + ' !important; ' +
+            'color: ' + btnTextColor + ' !important; ' +
+            '}';
+
+        // --- 5. 挂载到沙盒专用的 style 标签 ---
+        var $style = $('#poilive2d-preview-dynamic-style');
+        if ($style.length === 0) {
+            $style = $('<style id="poilive2d-preview-dynamic-style"></style>').appendTo('head');
+        }
+        $style.html(previewCss);
+    }
+
+    // ==========================================
+    // ⭐ 实时预览面板：滚动显隐控制器 (进阶动态锚点版)
+    // ==========================================
+    function checkPreviewVisibility() {
+        var currentTab = localStorage.getItem('poilive2d_active_tab') || 'basic';
+        var scrollPos = $(window).scrollTop();
+
+        // 我们只在“样式设置”页面内进行计算和显示
+        if (currentTab === 'style') {
+
+            // 动态寻找“按钮样式设置”的标题（H2标签），如果找不到就用 #btn_size 兜底
+            var $anchor = $('#tab-style h2:contains("按钮")').length ? $('#tab-style h2:contains("按钮")') : $('#btn_size');
+            var triggerOffset = 300; // 保底初始值
+
+            // 确保元素存在且可见（防止在刚切换标签页、动画还没结束时获取到 0）
+            if ($anchor.length > 0 && $anchor.is(':visible')) {
+                triggerOffset = $anchor.offset().top - 200;
+            }
+
+            // 核心判定：向下滚动超过 锚点位置 - 100px
+            if (scrollPos > triggerOffset) {
+                if ($('#poilive2d-live-preview').is(':hidden')) {
+                    $('#poilive2d-live-preview').stop(true, true).fadeIn(200);
+                    updateLivePreview(); // 确保弹出来时读取的是最新表单值
+                }
+            } else {
+                if ($('#poilive2d-live-preview').is(':visible')) {
+                    $('#poilive2d-live-preview').fadeOut(200);
+                }
+            }
+
+        } else {
+            // 如果不在样式页，直接隐藏
+            if ($('#poilive2d-live-preview').is(':visible')) {
+                $('#poilive2d-live-preview').fadeOut(200);
+            }
+        }
+    }
+
+    // 监听鼠标滚轮/拖动条事件，实时触发判定
+    $(window).on('scroll', function () {
+        checkPreviewVisibility();
+    });
+
+
+    // 监听：文本框数字改变、下拉菜单改变
+    $(document).on('input change', '#tab-style input[type="number"], #tab-style select', function () {
+        updateLivePreview();
+    });
+
+    // 刷新进入后台时，如果当前正好是样式页，立即点亮面板
+    if (activeTab === 'style') {
+        setTimeout(checkPreviewVisibility, 100);
+    }
+
+    // 统筹加号按钮的移动逻辑
+    function updateActionButtons(container, rowClass, addBtnClass) {
+        container.find('.' + addBtnClass).remove();
+        var lastRow = container.find('.' + rowClass).last();
+        lastRow.append('<button type="button" class="button ' + addBtnClass + '">+</button>');
+    }
+
+    // 给“增加新组”按钮准备一个初始模板。
+    // 否则当某个分组容器里的 .selector-group-box 被全部删掉后，
+    // add-new-group 就没有对象可以 clone。
+    $('.grouped-rows-container, .grouped-textarea-container').each(function () {
+        var $firstGroup = $(this).find('> .selector-group-box').first();
+
+        if ($firstGroup.length) {
+            $(this).data('emptyGroupTemplate', $firstGroup.clone());
+        }
+    });
+
+    // 自动扩展文本框高度 (新增兼容了 auto-expand-textarea)
+    $(document).on('input', '.group-text-area, .auto-expand-textarea', function () {
+        // 先设为 auto 以允许用户删除文字时框体能往回缩
+        this.style.height = 'auto';
+        // 获取真实的文字高度并补偿 2px 的边框误差
+        this.style.height = (this.scrollHeight + 2) + 'px';
+    });
+
+
+    // ==========================================
+    // 2. 动态布局的增删交互
+    // ==========================================
+
+    // --- 分组行模式 ---
+    $(document).on('click', '.add-text-row-styled', function () {
+        var pool = $(this).closest('.group-right-pool');
+        var clone = pool.find('.text-row').last().clone();
+        clone.find('input').val('');
+        pool.append(clone);
+        updateActionButtons(pool, 'text-row', 'add-text-row-styled');
+    });
+
+    $(document).on('click', '.remove-row-styled', function (e) {
+        e.preventDefault();
+
+        var $row = $(this).closest('.text-row');
+
+        // 分组行模式：左侧“目标” + 右侧多条“提示文本”
+        var $pool = $row.closest('.group-right-pool');
+
+        if ($pool.length) {
+            var $group = $pool.closest('.selector-group-box');
+            var rowCount = $pool.find('> .text-row').length;
+
+            if (rowCount > 1) {
+                // 当前组里还有其他文本，只删这一行
+                $row.remove();
+                updateActionButtons($pool, 'text-row', 'add-text-row-styled');
+            } else {
+                // 当前组只剩这一条文本，直接删掉整个组
+                $group.remove();
+            }
+
+            return;
+        }
+
+        // 单列重复模式：这里没有“蓝色增加新组”按钮，所以仍保留最后一行
+        var $singleContainer = $row.closest('.single-repeater-container');
+
+        if ($singleContainer.length) {
+            if ($singleContainer.find('> .text-row').length > 1) {
+                $row.remove();
+            } else {
+                $row.find('input, textarea').val('').trigger('input change');
+            }
+
+            updateActionButtons($singleContainer, 'text-row', 'add-single-row-styled');
+        }
+    });
+
+    // --- 单列重复模式 ---
+    $(document).on('click', '.add-single-row-styled', function () {
+        var container = $(this).closest('.single-repeater-container');
+        var clone = container.find('.text-row').last().clone();
+        clone.find('input').val('');
+        container.append(clone);
+        updateActionButtons(container, 'text-row', 'add-single-row-styled');
+    });
+
+    // --- 增加新组 (通用) ---
+    $(document).on('click', '.add-new-group', function (e) {
+        e.preventDefault();
+
+        var $container = $('#' + $(this).data('target'));
+        var $source = $container.find('> .selector-group-box').last();
+        var $clone;
+
+        if ($source.length) {
+            $clone = $source.clone();
+        } else {
+            // 如果当前容器里的组已经被删光，就使用页面初始化时缓存的模板
+            var $template = $container.data('emptyGroupTemplate');
+
+            if (!$template || !$template.length) {
+                return;
+            }
+
+            $clone = $template.clone();
+        }
+
+        // 清空新组内容
+        $clone.find('input, textarea').val('');
+
+        // 防止克隆到 submit 过程中动态追加的 hidden input
+        $clone.find('input[type="hidden"]').remove();
+
+        // 分组行模式：新建组时只保留一条右侧文本
+        if ($clone.find('.group-right-pool').length > 0) {
+            $clone.find('.text-row').not(':first').remove();
+            updateActionButtons($clone.find('.group-right-pool'), 'text-row', 'add-text-row-styled');
+        }
+
+        $container.append($clone);
+
+        // 多行文本框模式需要重新计算高度
+        $clone.find('.group-text-area, .auto-expand-textarea').trigger('input');
+    });
+
+    // ==========================================
+    // 2.5 分时段欢迎语校验
+    // ==========================================
+    function parseWelcomeHourlySelector(value) {
+        var match = String(value || '').trim().match(/^(\d{1,2})—(\d{1,2})$/);
+
+        if (!match) {
+            return null;
+        }
+
+        var start = parseInt(match[1], 10);
+        var end = parseInt(match[2], 10);
+
+        if (
+            isNaN(start) ||
+            isNaN(end) ||
+            start < 0 ||
+            end > 24 ||
+            start >= end
+        ) {
+            return null;
+        }
+
+        return {
+            start: start,
+            end: end
+        };
+    }
+
+    function validateWelcomeHourlyRanges() {
+        var $container = $('#welcome_hourly_container');
+
+        // 如果当前页面没有这个容器，直接放行，避免影响其他设置页。
+        if (!$container.length) {
+            return true;
+        }
+
+        var ranges = [];
+        var errors = [];
+        var $firstErrorInput = null;
+
+        $container.find('.group-selector-input').removeClass('poilive2d-input-error');
+
+        $container.find('.selector-group-box').each(function (index) {
+            var $box = $(this);
+            var $input = $box.find('.group-selector-input').first();
+            var raw = $.trim($input.val() || '');
+
+            if (!raw) {
+                return;
+            }
+
+            var parsed = parseWelcomeHourlySelector(raw);
+
+            if (!parsed) {
+                errors.push(
+                    '第 ' + (index + 1) + ' 组“' + raw + '”时间段格式错误。'
+                );
+
+                $input.addClass('poilive2d-input-error');
+
+                if (!$firstErrorInput) {
+                    $firstErrorInput = $input;
+                }
+
+                return;
+            }
+
+            for (var i = 0; i < ranges.length; i++) {
+                var old = ranges[i];
+
+                // 左闭右开区间重叠判断：
+                // [a,b) 与 [c,d) 重叠 ⇔ a < d && c < b
+                if (parsed.start < old.end && old.start < parsed.end) {
+                    errors.push(
+                        '第 ' + (index + 1) + ' 组“' + raw + '”与第 ' + old.index + ' 组“' + old.raw + '”时间段冲突。'
+                    );
+
+                    $input.addClass('poilive2d-input-error');
+                    old.$input.addClass('poilive2d-input-error');
+
+                    if (!$firstErrorInput) {
+                        $firstErrorInput = $input;
+                    }
+                }
+            }
+
+            ranges.push({
+                raw: raw,
+                start: parsed.start,
+                end: parsed.end,
+                index: index + 1,
+                $input: $input
+            });
+        });
+
+        if (errors.length > 0) {
+            var helpText = [
+                '',
+                '标准格式规范：',
+                '1. 时间采用为24小时制。0 <= 起始时间 < 结束时间 <= 24。',
+                '2. 格式为“起始时间—结束时间”，例如 0—5，表示从 0:00 到 5:00 前',
+                '3. 各时间段不能重叠；如需跨天，请拆成两段，例如 23—24 和 0—2。'
+            ].join('\n');
+
+            alert(errors.join('\n') + helpText);
+
+            if ($firstErrorInput && $firstErrorInput.length) {
+                $firstErrorInput.focus();
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    function parseFestivalDateSelector(value) {
+        var match = String(value || '').trim().match(/^(\d{1,2})-(\d{1,2})$/);
+
+        if (!match) {
+            return null;
+        }
+
+        var month = parseInt(match[1], 10);
+        var day = parseInt(match[2], 10);
+
+        if (
+            isNaN(month) ||
+            isNaN(day) ||
+            month < 1 ||
+            month > 12 ||
+            day < 1 ||
+            day > 31
+        ) {
+            return null;
+        }
+
+        return {
+            month: month,
+            day: day,
+            key: month + '-' + day
+        };
+    }
+
+    function validateWelcomeFestivalDates() {
+        var $container = $('#welcome_festival_container');
+
+        if (!$container.length) {
+            return true;
+        }
+
+        var errors = [];
+        var $firstErrorInput = null;
+
+        $container.find('.group-selector-input').removeClass('poilive2d-input-error');
+
+        $container.find('.selector-group-box').each(function (index) {
+            var $input = $(this).find('.group-selector-input').first();
+            var raw = $.trim($input.val() || '');
+
+            if (!raw) {
+                return;
+            }
+
+            var parsed = parseFestivalDateSelector(raw);
+
+            if (!parsed) {
+                errors.push(
+                    '第 ' + (index + 1) + ' 组“' + raw + '”日期格式错误。'
+                );
+
+                $input.addClass('poilive2d-input-error');
+
+                if (!$firstErrorInput) {
+                    $firstErrorInput = $input;
+                }
+            }
+        });
+
+        if (errors.length > 0) {
+            var helpText = [
+                '',
+                '标准格式规范：',
+                '1. 日期格式为 月-日，可以自由补0，例如 05-01、5-01、05-1。都会按 5-1 识别。',
+                '2. 月份范围为 1~12，日期范围为 1~31。',
+            ].join('\n');
+
+            alert(errors.join('\n') + helpText);
+
+            if ($firstErrorInput && $firstErrorInput.length) {
+                $firstErrorInput.focus();
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+    // ==========================================
+    // 3. 提交前的数据打平 (给 PHP 看的)
+    // ==========================================
+    $('#poilive2d-settings-form').on('submit', function () {
+        if (!validateWelcomeHourlyRanges()) {
+            return false;
+        }
+        if (!validateWelcomeFestivalDates()) {
+            return false;
+        }
+
+        
+        $('.grouped-rows-container, .grouped-textarea-container').each(function () {
+            var containerId = $(this).attr('id').replace('_container', '');
+            var globalIndex = 0;
+            var isTextarea = $(this).hasClass('grouped-textarea-container');
+
+            // 【核心修改 - 表单提交拦截】
+            $(this).find('.selector-group-box').each(function () {
+                var selector = $(this).find('.group-selector-input').val();
+                if (!selector) return;
+                var lines = isTextarea ? $(this).find('.group-text-area').val().split(/\r?\n/)
+                    : $(this).find('.group-text-input').map(function () { return $(this).val(); }).get();
+                var box = $(this);
+
+                var validLines = lines.filter(function (v) { return v.trim() !== ''; });
+                if (validLines.length > 0) {
+                    // 一个 selector 只生成一个 hidden input
+                    box.append('<input type="hidden" name="poilive2d_options[' + containerId + '][' + globalIndex + '][selector]" value="' + selector + '">');
+                    // 对应的 text 循环生成带有 [] 的数组 input
+                    validLines.forEach(function (val) {
+                        box.append('<input type="hidden" name="poilive2d_options[' + containerId + '][' + globalIndex + '][text][]" value="' + val.trim() + '">');
+                    });
+                    globalIndex++;
+                }
+            });
+            $(this).find('input:not([type=hidden]), textarea').removeAttr('name');
+        });
+
+        $('.single-repeater-container').each(function () {
+            var containerId = $(this).attr('id').replace('_container', '');
+            $(this).find('.single-text-input').each(function (i) {
+                $(this).attr('name', 'poilive2d_options[' + containerId + '][' + i + ']');
+            });
+        });
+
+        // (NEW) 将本地一言多行文本打平成数组
+        $('.json-array-textarea').each(function () {
+            var keyId = $(this).attr('id');
+            var lines = $(this).val().split(/\r?\n/);
+            var parent = $(this).parent();
+            var index = 0;
+            lines.forEach(function (val) {
+                if (val.trim() !== '') {
+                    parent.append('<input type="hidden" name="poilive2d_options[' + keyId + '][' + index + ']" value="' + val.trim() + '">');
+                    index++;
+                }
+            });
+            $(this).removeAttr('name'); // 防止原生提交字符串
+        });
+
+        $('.condition-interaction-container').each(function () {
+            var containerId = $(this).attr('id').replace('_container', '');
+            var globalIndex = 0;
+
+            $(this).find('.selector-group-box').each(function () {
+                var selector = $(this).find('.group-selector-input').val().trim();
+                if (!selector) return;
+
+                var condition = $(this).find('.group-condition-input').val().trim();
+                var trueLines = $(this).find('.group-text-true').val().split(/\r?\n/).filter(function (v) { return v.trim() !== ''; });
+                var falseLines = $(this).find('.group-text-false').val().split(/\r?\n/).filter(function (v) { return v.trim() !== ''; });
+
+                // 只有当存在有效判断规则或台词时，才将其编入提交队列
+                if (trueLines.length > 0 || falseLines.length > 0 || condition) {
+                    var box = $(this);
+
+                    // 生成基础文本 hidden
+                    box.append('<input type="hidden" name="poilive2d_options[' + containerId + '][' + globalIndex + '][selector]" value="' + selector + '">');
+                    box.append('<input type="hidden" name="poilive2d_options[' + containerId + '][' + globalIndex + '][condition]" value="' + condition + '">');
+
+                    // 生成真数组 hidden
+                    trueLines.forEach(function (val) {
+                        box.append('<input type="hidden" name="poilive2d_options[' + containerId + '][' + globalIndex + '][text_true][]" value="' + val.trim() + '">');
+                    });
+
+                    // 生成假数组 hidden
+                    falseLines.forEach(function (val) {
+                        box.append('<input type="hidden" name="poilive2d_options[' + containerId + '][' + globalIndex + '][text_false][]" value="' + val.trim() + '">');
+                    });
+
+                    globalIndex++;
+                }
+            });
+            // 剥夺原表单 name 属性，防止干扰
+            $(this).find('input:not([type=hidden]), textarea').removeAttr('name');
+        });
+
+    });
+
+    // ==========================================
+    // 4. 🚀 JSON 编辑器：双向同步核心逻辑
+    // ==========================================
+    var jsonEditor;
+
+    // A. 从图形界面抓取数据 -> 生成 JSON (仅限当前活动标签页)
+    function scrapeDOMToJSON() {
+        var data = {};
+        // 【核心修改】：锁定当前显示的标签页
+        var $currentTab = $('.poilive2d-tab-content:visible');
+
+        // 1. 抓取简单控件
+        $currentTab.find('[name^="poilive2d_options["]').each(function () {
+            var name = $(this).attr('name');
+            var match = name.match(/poilive2d_options\[(.*?)\]/);
+            if (match && match[1]) {
+                var key = match[1];
+                if ($('#' + key + '_container').length) return;
+
+                var val = $(this).val();
+                if ($(this).is(':radio') && !$(this).is(':checked')) return;
+
+                if ($(this).hasClass('json-array-textarea')) {
+                    var lines = val.split(/\r?\n/).filter(function (v) { return v.trim() !== ''; });
+                    data[key] = lines;
+                    return;
+                }
+
+                var subMatch = name.match(/poilive2d_options\[.*?\]\[(.*?)\]/);
+                if (subMatch && subMatch[1]) {
+                    if (!data[key]) data[key] = {};
+                    data[key][subMatch[1]] = val;
+                } else {
+                    data[key] = val;
+                }
+            }
+        });
+
+        // 2. 抓取分组行/文本框
+        $currentTab.find('.grouped-rows-container, .grouped-textarea-container').each(function () {
+            var key = $(this).attr('id').replace('_container', '');
+            data[key] = [];
+            var isTextarea = $(this).hasClass('grouped-textarea-container');
+
+            $(this).find('.selector-group-box').each(function () {
+                var sel = $(this).find('.group-selector-input').val();
+                if (!sel) return;
+
+                var lines = isTextarea ? $(this).find('.group-text-area').val().split(/\r?\n/)
+                    : $(this).find('.group-text-input').map(function () { return $(this).val(); }).get();
+
+                var validLines = lines.map(function(t) { return t.trim(); }).filter(function(t) { return t !== ''; });
+                if (validLines.length > 0) {
+                    data[key].push({ selector: sel, text: validLines });
+                }
+            });
+        });
+
+        // (NEW) 抓取动态条件容器
+        $currentTab.find('.condition-interaction-container').each(function () {
+            var key = $(this).attr('id').replace('_container', '');
+            data[key] = [];
+
+            $(this).find('.selector-group-box').each(function () {
+                var sel = $(this).find('.group-selector-input').val().trim();
+                if (!sel) return;
+
+                var cond = $(this).find('.group-condition-input').val().trim();
+
+                // 获取文本并过滤空行
+                var tLines = $(this).find('.group-text-true').val().split(/\r?\n/).map(function (t) { return t.trim(); }).filter(function (t) { return t !== ''; });
+                var fLines = $(this).find('.group-text-false').val().split(/\r?\n/).map(function (t) { return t.trim(); }).filter(function (t) { return t !== ''; });
+
+                if (tLines.length > 0 || fLines.length > 0 || cond) {
+                    data[key].push({
+                        selector: sel,
+                        condition: cond,
+                        text_true: tLines,
+                        text_false: fLines
+                    });
+                }
+            });
+        });
+
+        // 3. 抓取单列重复
+        $currentTab.find('.single-repeater-container').each(function () {
+            var key = $(this).attr('id').replace('_container', '');
+            data[key] = [];
+            $(this).find('.single-text-input').each(function () {
+                var val = $(this).val().trim();
+                if (val) data[key].push(val);
+            });
+        });
+
+        return data;
+    }
+
+    // B. 将 JSON 数据 -> 逆向渲染回图形界面
+    function syncJSONToDOM(data) {
+        $.each(data, function (key, value) {
+
+            // 1. 重建分组行模式
+            var $groupedRows = $('#' + key + '_container.grouped-rows-container');
+            if ($groupedRows.length) {
+                $groupedRows.empty();
+                var groupedObj = {};
+                (Array.isArray(value) ? value : []).forEach(function (item) {
+                    // 严格校验：确保 selector 存在，且 text 必须是数组
+                    if (item.selector && Array.isArray(item.text) && item.text.length > 0) {
+                        if (!groupedObj[item.selector]) groupedObj[item.selector] = [];
+                        // 直接拼接数组
+                        groupedObj[item.selector] = groupedObj[item.selector].concat(item.text);
+                    }
+                });
+
+                if ($.isEmptyObject(groupedObj)) groupedObj[''] = [''];
+
+                $.each(groupedObj, function (sel, texts) {
+                    var html = '<div class="selector-group-box" style="display: flex; margin-bottom: 10px; align-items: flex-start; gap: 10px;">' +
+                        '<input type="text" class="regular-text group-selector-input" style="width: 200px; font-weight: bold; margin: 0;" value="' + sel + '" placeholder="选择器">' +
+                        '<span style="font-weight: bold; margin-top: 5px;">:</span>' +
+                        '<div class="group-right-pool" style="flex: 1; display: flex; flex-direction: column; gap: 5px;">';
+                    texts.forEach(function (txt, idx) {
+                        var isLast = (idx === texts.length - 1);
+                        var btnAdd = isLast ? '<button type="button" class="button add-text-row-styled">+</button>' : '';
+                        html += '<div class="text-row" style="display: flex; gap: 5px; align-items: center;">' +
+                            '<input type="text" class="regular-text group-text-input" style="width: 600px; margin: 0;" value="' + txt + '" placeholder="提示文本">' +
+                            '<button type="button" class="button remove-row-styled">-</button>' + btnAdd +
+                            '</div>';
+                    });
+                    html += '</div></div>';
+                    $groupedRows.append(html);
+                });
+                return;
+            }
+
+            // 2. 重建多行文本框模式
+            var $groupedTextarea = $('#' + key + '_container.grouped-textarea-container');
+            if ($groupedTextarea.length) {
+                $groupedTextarea.empty();
+                var gObj = {};
+                (Array.isArray(value) ? value : []).forEach(function (item) {
+                    // 严格校验：确保 selector 存在，且 text 必须是数组
+                    if (item.selector && Array.isArray(item.text) && item.text.length > 0) {
+                        if (!gObj[item.selector]) gObj[item.selector] = [];
+                        // 直接拼接数组
+                        gObj[item.selector] = gObj[item.selector].concat(item.text);
+                    }
+                });
+
+                if ($.isEmptyObject(gObj)) gObj[''] = [''];
+
+                $.each(gObj, function (sel, texts) {
+                    var areaContent = texts.join('\n');
+                    var html = '<div class="selector-group-box" style="display: flex; margin-bottom: 10px; align-items: flex-start; gap: 10px;">' +
+                        '<input type="text" class="regular-text group-selector-input" style="width: 200px; font-weight: bold; margin: 0; height: 30px;" value="' + sel + '" placeholder="选择器">' +
+                        '<span style="font-weight: bold; margin-top: 5px;">:</span>' +
+                        '<div style="flex: 1;">' +
+                        '<textarea class="large-text group-text-area" rows="1" style="width: 600px; line-height: 1.5; padding: 3px 8px; min-height: 30px; margin: 0; resize: vertical; overflow: hidden;">' + areaContent + '</textarea>' +
+                        '</div></div>';
+                    $groupedTextarea.append(html);
+                });
+                $groupedTextarea.find('.group-text-area').trigger('input');
+                return;
+            }
+
+            // (NEW) 重建动态条件容器
+            var $conditionContainer = $('#' + key + '_container.condition-interaction-container');
+            if ($conditionContainer.length) {
+                $conditionContainer.empty();
+
+                var items = Array.isArray(value) ? value : [];
+                if (items.length === 0) items = [{ selector: '', condition: '', text_true: [], text_false: [] }];
+
+                items.forEach(function (item) {
+                    if (item.selector) {
+                        var tContent = Array.isArray(item.text_true) ? item.text_true.join('\n') : '';
+                        var fContent = Array.isArray(item.text_false) ? item.text_false.join('\n') : '';
+                        var cond = item.condition || '';
+
+                        var html = '<div class="selector-group-box" style="display: flex; margin-bottom: 10px; align-items: flex-start; gap: 10px;">' +
+                            // 左侧 200px 选框
+                            '<input type="text" class="regular-text group-selector-input" style="box-sizing: border-box; width: 200px; font-weight: bold; margin: 0; height: 40px; line-height: 24px;" value="' + cond_escape(item.selector) + '" placeholder="触发元素 (如: .aplayer-pic)">' +
+                            // 冒号
+                            '<span style="font-weight: bold; margin-top: 10px;">:</span>' +
+                            // 右侧容器
+                            '<div style="flex: 1; display: flex; flex-direction: column; gap: 10px;">' +
+                            // 条件输入框 200px
+                            '<input type="text" class="regular-text group-condition-input" style="box-sizing: border-box; width: 600px; font-family: monospace; margin: 0; height: 40px; line-height: 24px; background-color: #f6f7f7;" value="' + cond_escape(cond) + '" placeholder="判定条件 (如: length > 0)">' +
+                            // 绿框
+                            '<textarea class="large-text group-text-true auto-expand-textarea" rows="1" style="box-sizing: border-box; width: 600px; line-height: 24px; padding: 7px 8px; min-height: 40px; margin: 0; resize: vertical; overflow: hidden; border: 1px solid #46b450; border-left: 4px solid #46b450;" placeholder="[满足条件时触发] 一行一条回复...">' + cond_escape(tContent) + '</textarea>' +
+                            // 红框
+                            '<textarea class="large-text group-text-false auto-expand-textarea" rows="1" style="box-sizing: border-box; width: 600px; line-height: 24px; padding: 7px 8px; min-height: 40px; margin: 0; resize: vertical; overflow: hidden; border: 1px solid #dc3232; border-left: 4px solid #dc3232;" placeholder="[不满足条件时触发] 一行一条回复...">' + cond_escape(fContent) + '</textarea>' +
+                            '</div></div>';
+
+                        $conditionContainer.append(html);
+                    }
+                });
+
+                // 防止 XSS 注射破环 HTML
+                function cond_escape(str) { return $('<div>').text(str).html(); }
+
+                // 触发重新计算高度
+                $conditionContainer.find('.auto-expand-textarea').trigger('input');
+                return;
+            }
+
+            // 4. 处理单列重复容器 (repeater_single_callback)
+            var $singleRepeater = $('#' + key + '_container.single-repeater-container');
+            if ($singleRepeater.length) {
+                $singleRepeater.empty();
+                var items = Array.isArray(value) ? value : (value ? [value] : ['']);
+                if (items.length === 0) items = [''];
+                $.each(items, function (idx, item) {
+                    var isLast = (idx === items.length - 1);
+                    // 转义 HTML 防止 XSS
+                    var escapedItem = $('<div>').text(item).html();
+                    var rowHtml = '<div class="text-row" style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px;">' +
+                        '<input type="text" class="regular-text single-text-input" style="width: 600px; margin: 0;" value="' + escapedItem + '" placeholder="输入内容">' +
+                        '<button type="button" class="button remove-row-styled">-</button>' +
+                        (isLast ? '<button type="button" class="button add-single-row-styled">+</button>' : '') +
+                        '</div>';
+                    $singleRepeater.append(rowHtml);
+                });
+                return; // 处理完单列重复后跳过后续的简单控件逻辑
+            }
+
+            // 5. 填充简单数据与新文本框
+            var $input = $('[name="poilive2d_options[' + key + ']"]');
+            if ($input.length === 0) $input = $('#' + key); // 防止已经失去 name 属性时找不着对象
+
+            // (NEW) 如果是数组文本框，把数组 join 回车拼接回去
+            if ($input.hasClass('json-array-textarea')) {
+                var stringVal = Array.isArray(value) ? value.join('\n') : value;
+                $input.val(stringVal).trigger('input'); // 触发重新计算高度
+                return;
+            }
+
+            if (typeof value === 'object' && !Array.isArray(value)) {
+                $.each(value, function (subKey, subVal) {
+                    $('[name="poilive2d_options[' + key + '][' + subKey + ']"]').val(subVal);
+                });
+            } else {
+                if ($input.is(':radio')) {
+                    $input.filter('[value="' + value + '"]').prop('checked', true).trigger('change');
+                } else {
+                    $input.val(value);
+                    if ($input.hasClass('color-picker')) $input.wpColorPicker('color', value);
+                    if ($input.is('select')) $input.trigger('change'); // 触发联动逻辑 (下拉菜单更改)
+                }
+            }
+        });
+    }
+
+    // C. 弹窗交互控制
+    $('#poilive2d-open-editor').on('click', function (e) {
+        e.preventDefault();
+        
+
+        var currentData = scrapeDOMToJSON();
+        $('#poilive2d-json-modal').css('display', 'flex');
+
+        if (!jsonEditor) {
+            jsonEditor = wp.codeEditor.initialize($('#poilive2d-json-textarea'), poilive2d_editor_settings).codemirror;
+        }
+
+        jsonEditor.setValue(JSON.stringify(currentData, null, 4));
+        setTimeout(function () { jsonEditor.refresh(); }, 50);
+    });
+
+    $('#poilive2d-close-modal').on('click', function (e) {
+        e.preventDefault();
+        $('#poilive2d-json-modal').hide();
+    });
+
+    $('#poilive2d-sync-json').on('click', function (e) {
+        e.preventDefault();
+        try {
+            var rawJson = jsonEditor.getValue();
+            var parsedData = JSON.parse(rawJson);
+
+            // 【核心逻辑】：先将修改后的 JSON 静默同步回当前页面的 DOM 表单
+            syncJSONToDOM(parsedData);
+            $('#poilive2d-json-modal').hide();
+
+            // 【核心逻辑】：直接触发 WordPress 原生提交按钮，实现自动保存并刷新
+            var $btn = $(this);
+            $btn.text('保存中...').prop('disabled', true);
+            $('#submit').trigger('click');
+
+        } catch (err) {
+            alert('解析 JSON 失败，请检查格式是否正确！\n错误详情: ' + err.message);
+        }
+    });
+
+    // ==========================================
+    // 5. 真正完美的恢复本页默认设置 (自动保存版)
+    // ==========================================
+    $('#poilive2d-reset-defaults').on('click', function () {
+        if (!confirm('确定要将【当前标签页】的设置恢复为初始默认状态，并直接保存吗？\n\n注意：未保存的其他页面修改不会受影响。')) {
+            return;
+        }
+
+        var defaults = typeof poilive2d_defaults !== 'undefined' ? poilive2d_defaults : {};
+        var subsetToReset = {};
+
+        // 收集当前可见标签页里所有的 key
+        $('.poilive2d-tab-content:visible').find('[name^="poilive2d_options["], .grouped-rows-container, .grouped-textarea-container, .single-repeater-container, .json-array-textarea, .condition-interaction-container').each(function () {
+            var key;
+            var nameAttr = $(this).attr('name');
+            var idAttr = $(this).attr('id');
+
+            if (nameAttr) {
+                var match = nameAttr.match(/poilive2d_options\[(.*?)\]/);
+                if (match && match[1]) key = match[1];
+            } else if (idAttr) {
+                key = idAttr.replace('_container', '');
+            }
+
+            if (key && defaults[key] !== undefined) {
+                subsetToReset[key] = defaults[key];
+            }
+        });
+
+        // 1. 静默恢复数据到界面
+        syncJSONToDOM(subsetToReset);
+
+        // 2. 视觉反馈并触发自动保存
+        var $btn = $(this);
+        $btn.text('正在恢复并保存...').css('color', '#34a853').prop('disabled', true);
+
+        // 给浏览器 100ms 缓冲时间渲染表单，然后猛击提交按钮
+        setTimeout(function () {
+            $('#submit').trigger('click');
+        }, 100);
+    });
+
+
+    //快捷键保存。
+    $(document).on('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            $('#poilive2d-settings-form').find('#submit').trigger('click');
+            
+        }
+    });
+
+
+    
+    // ==========================================
+    // 交互显隐：一言页面的条件触发模块
+    // ==========================================
+
+    // 1. 精准锁定各模块所在的 tr 行 (利用必然存在的 name 属性作为锚点)
+    var $jinrishiciRow = $('th:contains("今日诗词推荐模式")').closest('tr');
+    var $localMsgsRow = $('th:contains("本地一言列表")').closest('tr');
+    var $msgsRow = $('th:contains("二句格式")').closest('tr');
+    var $suffixesRow = $('th:contains("后缀格式")').closest('tr');
+
+    // 新增：封装一个内联文本框的过滤函数
+    function filterTipRows(currentApi) {
+        $('.hitokoto-tip-row').each(function () {
+            // 如果行的 data-api 属性等于当前选择的 API，则显示，否则直接隐藏
+            if ($(this).data('api') === currentApi) {
+                $(this).show();
+                $(this).css('display', 'flex');
+            } else {
+                $(this).hide();
+            }
+        });
+    }
+
+    // 监听【一言 API】(Select) 的切换事件
+    $('#hitokoto_api').on('change', function () {
+        var selectedApi = $(this).val();
+
+        if (selectedApi === 'jinrishici') {
+            $jinrishiciRow.removeClass('hidden-settings-row').show();
+        } else {
+            $jinrishiciRow.addClass('hidden-settings-row').hide();
+        }
+
+        if (selectedApi === 'local') {
+            $localMsgsRow.removeClass('hidden-settings-row').show();
+            $localMsgsRow.find('.auto-expand-textarea').trigger('input');
+        } else {
+            $localMsgsRow.addClass('hidden-settings-row').hide();
+        }
+
+        // 执行内联文本框过滤
+        filterTipRows(selectedApi);
+    });
+    // 监听【一言与来源排列方式】(Radio) 的切换事件
+    $('input[name="poilive2d_options[hitokoto_origin]"]').on('change', function () {
+        var originType = $('input[name="poilive2d_options[hitokoto_origin]"]:checked').val();
+
+        if (originType === '0') {
+            $suffixesRow.removeClass('hidden-settings-row').show();
+            $msgsRow.addClass('hidden-settings-row').hide();
+        } else if (originType === '1') {
+            $msgsRow.removeClass('hidden-settings-row').show();
+            $suffixesRow.addClass('hidden-settings-row').hide();
+        } else {
+            $msgsRow.addClass('hidden-settings-row').hide();
+            $suffixesRow.addClass('hidden-settings-row').hide();
+        }
+    });
+
+    // 核心：在页面初始化加载时，以及绑定完所有事件后，立刻拉起一次触发行内显隐
+    filterTipRows($('#hitokoto_api').val());
+
+    // ==========================================
+    // 交互显隐：高级视线追踪参数 + LPV 呼吸参数
+    // ==========================================
+
+    // ------------------------------
+    // A. 高级视线追踪参数
+    // ------------------------------
+    var $decayRow = $('th:contains("衰减曲线指数")').closest('tr');
+    var $stiffnessRow = $('th:contains("弹簧拉力系数")').closest('tr');
+    var $dampingRow = $('th:contains("摩擦阻尼系数")').closest('tr');
+
+    function filterTrackRows(trackMode) {
+        var shouldShow = trackMode === 'bionic_spring';
+
+        if (shouldShow) {
+            $decayRow.removeClass('hidden-settings-row').show();
+            $stiffnessRow.removeClass('hidden-settings-row').show();
+            $dampingRow.removeClass('hidden-settings-row').show();
+        } else {
+            $decayRow.addClass('hidden-settings-row').hide();
+            $stiffnessRow.addClass('hidden-settings-row').hide();
+            $dampingRow.addClass('hidden-settings-row').hide();
+        }
+    }
+
+    // focus_track_mode 现在是 radio_callback，所以不要再监听 #focus_track_mode
+    $(document).on('change', 'input[name="poilive2d_options[focus_track_mode]"]', function () {
+        var trackMode = $('input[name="poilive2d_options[focus_track_mode]"]:checked').val();
+        filterTrackRows(trackMode);
+    });
+
+    // 页面初始化时立刻执行一次
+    filterTrackRows($('input[name="poilive2d_options[focus_track_mode]"]:checked').val());
+
+
+    // ------------------------------
+    // B. LPV / Steam 模型呼吸参数
+    // ------------------------------
+    var $lpvBreathBaseRow = $('th:contains("呼吸基准值")').closest('tr');
+    var $lpvBreathAmpRow = $('th:contains("呼吸振幅")').closest('tr');
+    var $lpvBreathCycleRow = $('th:contains("呼吸周期")').closest('tr');
+
+    function filterLPVBreathRows(enabled) {
+        var shouldShow = enabled === '1';
+
+        if (shouldShow) {
+            $lpvBreathBaseRow.removeClass('hidden-settings-row').show();
+            $lpvBreathAmpRow.removeClass('hidden-settings-row').show();
+            $lpvBreathCycleRow.removeClass('hidden-settings-row').show();
+        } else {
+            $lpvBreathBaseRow.addClass('hidden-settings-row').hide();
+            $lpvBreathAmpRow.addClass('hidden-settings-row').hide();
+            $lpvBreathCycleRow.addClass('hidden-settings-row').hide();
+        }
+    }
+
+    // lpv_breath_enable 也是 radio_callback
+    $(document).on('change', 'input[name="poilive2d_options[lpv_breath_enable]"]', function () {
+        var enabled = $('input[name="poilive2d_options[lpv_breath_enable]"]:checked').val();
+        filterLPVBreathRows(enabled);
+    });
+
+    // 页面初始化时立刻执行一次
+    filterLPVBreathRows($('input[name="poilive2d_options[lpv_breath_enable]"]:checked').val());
+
+    // ==========================================
+    // 交互显隐：基础设置的“单列菜单靠边方向”
+    // ==========================================
+    var $btnSingleDockRow = $('th:contains("单列菜单位置")').closest('tr');
+
+    // 监听“按钮排列” (单/双列) 的实时切换事件
+    $('input[name="poilive2d_options[btn_layout]"]').on('change', function () {
+        var layoutType = $('input[name="poilive2d_options[btn_layout]"]:checked').val();
+
+        if (layoutType === '1') {
+            // 选中单列，显示左右靠边选项
+            $btnSingleDockRow.removeClass('hidden-settings-row').show();
+        } else {
+            // 选中双列，隐藏
+            $btnSingleDockRow.addClass('hidden-settings-row').hide();
+        }
+    });
+
+    // ==========================================
+    // 完整配置导入 / 导出弹窗
+    // ==========================================
+    $(document).on('click', '#poilive2d-open-import-export', function () {
+        $('#poilive2d-import-export-modal').css('display', 'flex');
+    });
+
+    $(document).on('click', '#poilive2d-close-import-export', function () {
+        $('#poilive2d-import-export-modal').hide();
+    });
+
+    $(document).on('click', '#poilive2d-import-export-modal', function (e) {
+        if (e.target === this) {
+            $(this).hide();
+        }
+    });
+
+    $(document).on('submit', '#poilive2d-import-form', function (e) {
+        var fileVal = $('#poilive2d-import-file').val();
+
+        if (!fileVal) {
+            e.preventDefault();
+            alert('请先选择要导入的 JSON 配置文件。');
+            return;
+        }
+
+        var ok = confirm(
+            '导入完整配置会覆盖当前全部 PoiLive2D 设置。\n\n' +
+            '建议你先点击“导出完整配置”备份当前设置。\n\n' +
+            '确定继续导入吗？'
+        );
+
+        if (!ok) {
+            e.preventDefault();
+        }
+    });
+
+    // ==========================================
+    // 数字输入框滚轮调整：只改数值，不滚动页面
+    // ==========================================
+    document.querySelectorAll('#poilive2d-admin-wrap input[type="number"]').forEach(function (input) {
+        input.addEventListener('wheel', function (e) {
+            // Ctrl + 滚轮通常是浏览器缩放，别拦截
+            if (e.ctrlKey) {
+                return;
+            }
+
+            e.preventDefault();
+
+            var current = parseFloat(input.value);
+            var step = parseFloat(input.getAttribute('step'));
+            var min = input.getAttribute('min') !== null ? parseFloat(input.getAttribute('min')) : null;
+            var max = input.getAttribute('max') !== null ? parseFloat(input.getAttribute('max')) : null;
+
+            if (!Number.isFinite(current)) {
+                current = Number.isFinite(min) ? min : 0;
+            }
+
+            if (!Number.isFinite(step) || step <= 0) {
+                step = 1;
+            }
+
+            // 向上滚增加，向下滚减少
+            var next = current + (e.deltaY < 0 ? step : -step);
+
+            if (Number.isFinite(min) && next < min) {
+                next = min;
+            }
+
+            if (Number.isFinite(max) && next > max) {
+                next = max;
+            }
+
+            // 根据 step 推断小数位，避免 0.1 + 0.2 这种浮点误差
+            var stepText = String(input.getAttribute('step') || step);
+            var decimals = 0;
+
+            if (stepText.indexOf('.') !== -1) {
+                decimals = stepText.split('.')[1].length;
+            }
+
+            input.value = decimals > 0 ? next.toFixed(decimals) : String(Math.round(next));
+
+            // 触发已有实时预览逻辑
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        }, { passive: false });
+    });
+});
+

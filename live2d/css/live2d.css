@@ -1,18 +1,13 @@
 #landlord {
+    -webkit-user-select: none;
     user-select: none;
     position: fixed;
-    left: 30px;/* 决定live2d位置* 此行靠左，下行靠右/
-    /*right: 10px;*/ 
-    bottom: 0;
-    width: 280px;/*live2d的大小*/
-    height: 250px;/*live2d的大小*/
-    z-index: 99;
-    font-size: 0;
-    transition: all .3s ease-in-out;
+    z-index: 99 !important;
 }
 
 #live2d {
     position: relative;
+    z-index: 3 !important;
 }
 
 .message {
@@ -36,39 +31,24 @@
     text-transform: uppercase;
     overflow: hidden;
     position: absolute;
-    animation-delay: 5s;
+    /* animation-delay: 0.2s;
     animation-duration: 50s;
     animation-iteration-count: infinite;
     animation-name: shake;
-    animation-timing-function: ease-in-out;
-    z-index: 25;
-   /*  color: rgba(132,132,132,.6); */
-/*   cursor: default;*/
+    animation-timing-function: ease-in-out; */
+    z-index: 5 !important;
+   
+    transform-origin: center center;
+    will-change: transform;
+    backface-visibility: hidden;
+
 }
 
 .message a {
 	text-decoration: none;
 	color: #66ccff;
 }
-/*
-.l2d-menu {
-	position: absolute;
-	top: 10px;
-	right: 5px;
-	width: 60px;
-	height: 60px;
-	text-align:center;
-	display: none;
-}
-/*hide-button,.switch-button,.sing-button
-.l2d-menu {
 
-    border: 1px solid rgba(102,204,255,.4);
-
-    background: rgba(250, 248, 247, 0.9);
-    box-shadow: 0 3px 15px 2px rgba(102,204,255,.4);
-
-}*/
 .show-button { 
 	position: fixed;
 	display: none;
@@ -85,12 +65,17 @@
     text-align: center;
     font-size: 12px;
     cursor: pointer;
-	z-index: 99;
+	
 }
 
 .show-button:hover {
+    
     border: 1px solid #000000;
     background: #f4f6f8;
+}
+
+.l2d-menu{
+    z-index: 10 !important;
 }
 
 .l2d-action {
@@ -105,8 +90,7 @@
     width: 60px;
     height: 20px;
 
-    border-radius: 12px;
-
+    border-radius: 12px;   
 
     text-align: center;
     font-size: 12px;
@@ -114,6 +98,7 @@
 }
 
 .l2d-action-L{
+    
     position: absolute;
 	list-style: none;
     top:10px;
@@ -134,6 +119,7 @@
 }
 /*.hide-button:hover,.switch-button:hover,.sing-button:hover */
 .l2d-action:hover .l2d-action-L:hover{
+    
     border: 1px solid rgba(102,204,255,.6);
     background: rgba(216, 213, 210, 0.95);
     color: rgba(1, 47, 107, 0.8); 
@@ -187,10 +173,257 @@
 	font-family: Century Gothic, Microsoft YaHei;
 }
 
-@media (max-width: 860px) {
-    #landlord {
-        display: none;
-    }
+
+/* ==========================================
+   VTubeStudio 独立对话框 UI (Flat 2.0 暗色主题)
+   ========================================== */
+
+/* 1. 弹窗主面板 */
+#vts-dialog {
+    display: none;
+    /* 默认隐藏，由 jQuery 动画接管显示/隐藏 */
+    position: absolute;
+    bottom: 5px;
+    left: 0px;
+    right: 0px;
+    background: rgba(20, 25, 30, 0.6);
+    border: 1px solid rgba(102, 204, 255, 0.5) !important;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 10px rgba(102, 204, 255, 0.2);
+    z-index: 100;
+    pointer-events: auto;
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    /* 兼容 Safari */
+}
+
+/* 2. 文本显示区 */
+#vts-text {
+    font-size: 15px;
+    color: #f4f6f8;
+    margin-bottom: 0px;
+    text-align: center;
+    font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* 3. 按钮容器列 */
+#vts-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+
+#vts-choices:not(:empty) {
+    margin-top: 12px;	
+}
+
+/* 4. Flat 2.0 现代扁平化按钮 (常态) */
+.vts-btn {
+    padding: 8px 12px !important;
+    background: rgba(45, 50, 55, 0.4) !important;
+    border: 1px solid rgba(102, 204, 255, 0.2) !important;
+    border-radius: 6px !important;
+    color: #f4f6f8 !important;
+    font-size: 14px !important;
+    font-weight: normal !important;
+    letter-spacing: 0.5px !important;
+    cursor: pointer !important;
+    text-align: center !important;
+    outline: none !important;
+    margin: 0 !important;
+    display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1 !important;
+    /* 核心过渡动画：涵盖颜色、阴影和位移的平滑演算 */
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    /* 仅保留极其微弱的外部物理投影，消除拟物感 */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* 5. 按钮悬停交互 (Hover: 微抬起 + 色彩透出) */
+.vts-btn:hover {
+    background: rgba(102, 204, 255, 0.2) !important;
+    border-color: rgba(102, 204, 255, 0.6) !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4), 0 0 8px rgba(102, 204, 255, 0.15) !important;
+    transform: translateY(-2px) !important;
+    /* Z轴悬浮 */
+}
+
+/* 6. 按钮点击交互 (Active: 贴合归位) */
+.vts-btn:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+    background: rgba(102, 204, 255, 0.2) !important;
+}
+
+
+
+/* ==========================================
+   模型微调控制面板 UI (继承 Flat 2.0 暗色主题)
+   ========================================== */
+#poi-transform-panel {
+    /* 物理定位由 JS 动态判定(靠左/靠右)，这里只负责视觉样式 */
+    font-family: Arial;
+    width: 220px;
+    background: rgba(20, 25, 30, 0.6);
+    border: 1px solid rgba(102, 204, 255, 0.5);
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 10px rgba(102, 204, 255, 0.2);
+    color: #f4f6f8;
+    
+    font-size: 14px;
+    z-index: 100;
+    box-sizing: border-box;
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+}
+
+/* 顶部拖拽把手区 */
+.poi-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(102, 204, 255, 0.3);
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+    cursor: move;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.poi-panel-header b {
+    font-size: 15px;
+    letter-spacing: 1px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* 关闭按钮 */
+#poi-tf-close {
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    font-weight: bold;
+    opacity: 0.7;
+    transition: 0.2s;
+}
+
+#poi-tf-close:hover {
+    opacity: 1;
+    color: #66ccff;
+}
+
+/* 控制行间距与排版 */
+.poi-tf-row {
+    margin-bottom: 12px;
+}
+
+.poi-tf-row:last-of-type {
+    margin-bottom: 18px;
+    /* 让最后一行和底部按钮拉开点呼吸感 */
+}
+
+.poi-tf-row>div {
+display: flex;
+    justify-content: space-between;
+    /* 1. 删掉原来的 opacity: 0.9; */
+
+    /* 2. 改用颜色的 Alpha 通道来实现透明，这样不会破坏抗锯齿，字就不会变细 */
+    color: rgba(255, 255, 255, 0.9);
+
+    /* 3. 增加极弱的黑色文字阴影，视觉上把字“撑胖” */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+
+    /* 4. 如果你觉得还不够，可以微微加粗 (400是正常，500是中等，600是半粗) */
+    font-weight: 400;
+}
+
+/* 美化滑动条：使用天依蓝为主色调 */
+.poi-tf-row input[type=range] {
+    width: 100%;
+    margin-top: 6px;
+    cursor: pointer;
+    accent-color: #66ccff;
+    /* 现代浏览器原生支持，一键变色 */
+}
+
+#poi-corner-tools {
+    position: absolute;
+    bottom: 2px;
+    /* 距离底部稍微留一点呼吸感 */
+    display: none;
+    flex-direction: row;;
+    gap: 8px;
+    /* 两个按钮之间的间距 */
+    z-index: 100;
+}
+
+/* 20x20 小巧精致的按钮样式 */
+.poi-corner-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    /* 基础线框，颜色由PHP注入 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-user-select: none;
+    user-select: none;
+
+}
+
+.poi-corner-btn:hover {
+    transform: scale(1.1);
+    /* 鼠标悬停微微放大 */
+}
+
+/* VTS 弹窗关闭按钮 */
+#vts-dialog-close {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    opacity: 0.6;
+    transition: all 0.2s ease;
+    line-height: 1;
+    z-index: 10;
+    color: #fff;
+}
+
+/* 鼠标悬停时的天依蓝发光效果 */
+#vts-dialog-close:hover {
+    opacity: 1;
+    color: #66ccff;
+}/* VTS 弹窗关闭按钮 */
+#vts-dialog-close {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    opacity: 0.6;
+    transition: all 0.2s ease;
+    line-height: 1;
+    z-index: 10;
+    color: #fff;
+}
+
+/* 鼠标悬停时的天依蓝发光效果 */
+#vts-dialog-close:hover {
+    opacity: 1;
+    color: #66ccff;
 }
 
 @keyframes shake {

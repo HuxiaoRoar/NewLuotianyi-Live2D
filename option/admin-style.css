@@ -1,0 +1,155 @@
+.remove-row-styled,
+.add-text-row-styled,
+.add-single-row-styled {
+    width: 40px !important;
+    height: 40px !important;
+    padding: 0 !important;
+    line-height: 28px !important;
+    text-align: center !important;
+    font-weight: bold !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.hidden-settings-row {
+    display: none !important;
+}
+
+.add-text-row-styled,
+.add-single-row-styled {
+    color: #2271b1 !important;
+}
+
+.remove-row-styled {
+    color: #b32d2e !important;
+}
+
+/* 1. 给所有标签强制统一尺寸和底边距，彻底消灭切换时的物理形变 */
+.nav-tab-wrapper .poilive2d-tab-link {
+    box-sizing: border-box !important;
+    border-bottom: 1px solid transparent !important;
+    /* 未激活时用透明边框占位，保持高度不变 */
+    transition: none !important;
+    /* 杀掉可能存在的 WordPress 原生过度动画 */
+}
+
+/* 2. 激活状态下，仅仅改变底部边框的颜色，绝不改变尺寸 */
+.nav-tab-wrapper .poilive2d-tab-link.nav-tab-active {
+    border-bottom: 1px solid #f0f0f1 !important;
+    /* 配合 WordPress 默认后台的背景色 */
+}
+
+/* 3. 给最外圈的包裹器一个固定的底边距，防止与表单发生折叠突变 */
+h2.nav-tab-wrapper,
+.wrap h2.nav-tab-wrapper {
+    margin-bottom: 15px !important;
+    padding-bottom: 0 !important;
+}
+
+/* ==========================================
+ * 实时预览面板 (后台独立样式)
+ * ========================================== */
+
+/* 1. 外层悬浮窗口 */
+#poilive2d-live-preview {
+    position: fixed;
+    right: 20px;
+    top: 60px;
+    /* 避开顶部的 WordPress 黑条 */
+    width: 380px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    z-index: 99;
+}
+
+.preview-header {
+    padding: 10px 15px;
+    background: #f6f7f7;
+    border-bottom: 1px solid #c3c4c7;
+    border-radius: 4px 4px 0 0;
+}
+
+/* 2. 模拟沙盒画布 (带格子背景以凸显透明度) */
+.preview-canvas {
+    position: relative;
+    width: 100%;
+    height: 350px;
+    background-image:
+        linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee),
+        linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+    overflow: hidden;
+}
+
+/* 3. 模拟人物占位图 */
+.preview-model-placeholder {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 150px;
+    height: 180px;
+    background: rgba(200, 200, 200, 0.4);
+    border: 2px dashed #999;
+    border-radius: 10px 10px 0 0;
+    text-align: center;
+    line-height: 220px;
+    color: #666;
+    font-size: 14px;
+}
+
+/* 4. 模拟基础组件结构 (具体色彩大小等下由 JS 动态注入 inline 样式) */
+.preview-message {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    padding: 10px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    border: 1px solid;
+    border-radius: 12px;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.preview-menu-right {
+    position: absolute;
+    right: 20px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.preview-action {
+    display: block;
+    text-align: center;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: default;
+    transition: all 0.2s;
+}
+
+.preview-corner-tools {
+    position: absolute;
+    right: 20px;
+    bottom: 15px;
+    display: flex;
+    gap: 5px;
+}
+
+.preview-corner-btn {
+    width: 20px;
+    text-align: center;
+    border-radius: 50%;
+    cursor: default;
+    transition: all 0.2s;
+    font-size: 12px;
+}

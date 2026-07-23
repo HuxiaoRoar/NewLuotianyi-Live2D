@@ -1,0 +1,57 @@
+name: Release WordPress Plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create release notes from commit message
+        shell: bash
+        run: |
+          commit_sha="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          git log -1 --format=%b "$commit_sha" > release-notes.md
+
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            git log -1 --format=%s "$commit_sha" > release-notes.md
+          fi
+
+      - name: Create WordPress plugin package
+        id: package
+        shell: bash
+        run: |
+          plugin_slug="newluotianyi-live2d"
+          package_name="${plugin_slug}-${GITHUB_REF_NAME}.zip"
+          package_dir="dist/${plugin_slug}"
+
+          mkdir -p "$package_dir"
+          cp index.php main.php option.php readme.txt LICENSE "$package_dir/"
+          cp -R live2d option "$package_dir/"
+
+          (
+            cd dist
+            zip -r "$package_name" "$plugin_slug"
+          )
+
+          echo "path=dist/${package_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: false
+          files: ${{ steps.package.outputs.path }}

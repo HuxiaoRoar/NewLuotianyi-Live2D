@@ -1,0 +1,34 @@
+{
+  "name": "nlty-live2d",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "acorn": "^8.17.0",
+    "buffer-from": "^1.1.2",
+    "commander": "^2.20.3",
+    "source-map": "^0.6.1",
+    "source-map-support": "^0.5.21"
+  },
+  "devDependencies": {
+    "terser": "^5.49.0"
+  },
+  "scripts": {
+    "build:js": "npm run minify:run && npm run minify:message && npm run minify:ctrl && npm run minify:admin",
+    "minify:run": "terser live2d/js/run_local.js -c -m -o live2d/js/run_local.min.js",
+    "minify:message": "terser live2d/js/live2d-message.js -c -m -o live2d/js/live2d-message.min.js",
+    "minify:ctrl": "terser live2d/js/live2d-ctrl.js -c -m -o live2d/js/live2d-ctrl.min.js",
+    "minify:admin": "terser option/admin-scripts.js -c -m -o option/admin-scripts.min.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HuxiaoRoar/Poilive2dNLTY1lingshi.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/HuxiaoRoar/Poilive2dNLTY1lingshi/issues"
+  },
+  "homepage": "https://github.com/HuxiaoRoar/Poilive2dNLTY1lingshi#readme"
+}

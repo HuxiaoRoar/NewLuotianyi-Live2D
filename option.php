@@ -1,82 +1,178 @@
 <?php
 defined('ABSPATH') or exit;
-if ($_POST['update_pluginoptions'] == 'true') {
-    live2d_options_update();
-    echo '<div id="message" class="updated"><h4>设置已成功保存</a></h4></div>';
-}
+
+$poilive2d_export_url = wp_nonce_url(
+    admin_url('admin-post.php?action=poilive2d_export_settings'),
+    'poilive2d_export_settings',
+    'poilive2d_export_nonce'
+);
+
+// 获取当前激活的标签页，默认为 'basic'
+$active_tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'basic';
 ?>
-<style>
-    input[type='color']{
-        width: 25px;
-        height: 25px;  
-        padding: .1px 2px;
-    }
-    textarea{
-        width: 60%;
-        height: 230px;
-    }
-</style>
-<div class="wrap">
-<h2>PoiLive2D（新·洛天依） 插件控制面板</h2>
-<form method="POST" action="">
-<input type="hidden" name="update_pluginoptions" value="true" />
-    <h3>基本设置</h3>
-    <div style="margin-left: 50px">
-        <input type="color" name="main-color" id="main-color" value="<?php echo get_option('live2d_maincolor'); ?>" /> 对话框阴影颜色<p>
-        <input type="color" name="bg-color" id="bg-color" value="<?php echo get_option('live2d_bgcolor'); ?>" /> 对话框背景颜色<p>
-        <input type="color" name="font-color" id="font-color" value="<?php echo get_option('live2d_fontcolor'); ?>" /> 对话框文字颜色<p>    
-        <input type="checkbox" name="no-hitokoto" id="no-hitokoto" <?php echo get_option('live2d_nohitokoto'); ?> /> 关闭一言显示<p>
-        <input type="checkbox" name="no-specialtip" id="no-specialtip" <?php echo get_option('live2d_nospecialtip'); ?> /> 关闭特殊显示<p>
-		<input type="checkbox" name="no-catalog" id="no-catalog" <?php echo get_option('live2d_nocatalog'); ?> /> 关闭文章目录<p>
+
+<div class="wrap" id="poilive2d-admin-wrap">
+    <h2>新·洛天依 Live2D</h2>
+
+    <?php settings_errors('poilive2d_options_group'); ?>
+
+    <h2 class="nav-tab-wrapper">
+        <a href="javascript:void(0);" class="nav-tab poilive2d-tab-link" data-tab="basic">基础设置</a>
+        <a href="javascript:void(0);" class="nav-tab poilive2d-tab-link" data-tab="style">样式设置</a>
+        <a href="javascript:void(0);" class="nav-tab poilive2d-tab-link" data-tab="hitokoto">一言设置</a>
+        <a href="javascript:void(0);" class="nav-tab poilive2d-tab-link" data-tab="interactive">交互设置</a>
+        <a href="javascript:void(0);" class="nav-tab poilive2d-tab-link" data-tab="advanced">高级设置</a>
+    </h2>
+
+    <script type="text/javascript">
+        (function() {
+            var activeTab = localStorage.getItem('poilive2d_active_tab') || 'basic';
+
+            // 1. 趁热打铁：此时上方的 HTML 刚画完，立刻给对应的标签按钮加上高亮
+            var activeLink = document.querySelector('.poilive2d-tab-link[data-tab="' + activeTab + '"]');
+            if (activeLink) {
+                activeLink.className += ' nav-tab-active';
+            }
+
+            // 2. 降维打击：向 head 注入高优先级样式。当下方的表单 div 被解析时，目标页会无视 display:none 直接被画出来
+            var style = document.createElement('style');
+            style.id = 'poilive2d-pre-render-style';
+            style.innerHTML = '#tab-' + activeTab + ' { display: block !important; }';
+            document.head.appendChild(style);
+        })();
+    </script>
+
+    <form method="POST" action="options.php" id="poilive2d-settings-form">
+        <?php settings_fields('poilive2d_options_group'); ?>
+
+        <div id="tab-basic" class="poilive2d-tab-content" style="display: none;">
+            <?php do_settings_sections('poilive2d-basic'); ?>
+        </div>
+
+        <div id="tab-style" class="poilive2d-tab-content" style="display: none;">
+            <?php do_settings_sections('poilive2d-style'); ?>
+        </div>
+
+        <div id="tab-hitokoto" class="poilive2d-tab-content" style="display: none;">
+            <?php do_settings_sections('poilive2d-hitokoto'); ?>
+        </div>
+
+        <div id="tab-interactive" class="poilive2d-tab-content" style="display: none;">
+            <?php do_settings_sections('poilive2d-interactive'); ?>
+        </div>
+
+        <div id="tab-advanced" class="poilive2d-tab-content" style="display: none;">
+            <?php do_settings_sections('poilive2d-advanced'); ?>
+        </div>
+
+        <div class="submit-wrapper" style="display: flex; align-items: center; gap: 10px; margin-top: 20px;">
+            <?php submit_button('保存所有设置', 'primary', 'submit', false); ?>
+
+            <button type="button" class="button" id="poilive2d-reset-defaults" style="color: #b32d2e; border-color: #b32d2e;">
+                恢复本页默认
+            </button>
+
+            <button type="button" class="button" id="poilive2d-open-editor">
+                JSON 源码编辑器
+            </button>
+
+            <button type="button" class="button" id="poilive2d-open-import-export">
+                导入 / 导出
+            </button>
+        </div>
+    </form>
+
+    <div id="poilive2d-json-modal" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; align-items: center; justify-content: center;">
+        <div class="modal-content" style="background: #fff; width: 900px; max-width: 90%; border-radius: 5px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); padding: 20px;">
+            <h3>JSON 配置编辑器</h3>
+            <p class="description">你可以直接在此粘贴大段的 JSON 配置，点击“同步到界面”后，上方的图形化表单会自动更新（仅限当前选项卡的内容）。</p>
+            <textarea id="poilive2d-json-textarea" style="width:100%; height:450px; font-family: monospace; border: 1px solid #ddd;"></textarea>
+            <div style="margin-top: 15px;">
+                <button type="button" class="button button-primary" id="poilive2d-sync-json">直接保存配置</button>
+                <button type="button" class="button" id="poilive2d-close-modal">取消退出</button>
+            </div>
+        </div>
     </div>
-    <h3>高级设置</h3>
-    <div style="margin-left: 50px">
-	<input type="checkbox" name="localkoto" id="localkoto" <?php echo get_option('live2d_localkoto'); ?> /> 设置本地一言（需开启一言显示）<p>
-	<p>自定义本地一言</p> <textarea name="custom-koto" id="custom-koto"><?php echo get_option('live2d_customkoto'); ?></textarea>
-    <p>自定义提示</p> <textarea name="custom-msg" id="custom-msg"><?php echo get_option('live2d_custommsg'); ?></textarea>
-    <p>请自行校验json有效性，不需要的话请填写{}</p>
+
+    <div id="poilive2d-import-export-modal" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; align-items: center; justify-content: center;">
+        <div class="modal-content" style="background: #fff; width: 720px; max-width: 90%; border-radius: 5px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); padding: 22px;">
+            <h3 style="margin-top: 0;">配置文件导入、导出</h3>
+
+            <p class="description" style="font-size: 14px;">
+                导入、导出会处理全部选项卡的完整配置。导入会覆盖当前全部设置，建议先导出备份。
+            </p>
+
+            <div style="margin-top: 18px; padding: 14px 16px; background: #f6f7f7; border: 1px solid #dcdcde; border-radius: 4px;">
+                <h4 style="margin: 0 0 10px;">导出完整配置</h4>
+                <p class="description" style="margin: 0 0 12px;">
+                    将当前全部配置导出为 JSON 文件，用于备份或迁移站点。
+                </p>
+                <a href="<?php echo esc_url($poilive2d_export_url); ?>" class="button button-secondary">
+                    导出完整配置
+                </a>
+            </div>
+
+            <div style="margin-top: 16px; padding: 14px 16px; background: #fff8e5; border: 1px solid #dba617; border-radius: 4px;">
+                <h4 style="margin: 0 0 10px;">导入完整配置</h4>
+                <p class="description" style="margin: 0 0 12px;">
+                    选择之前导出的 JSON 配置文件。导入后会覆盖当前全部设置。
+                </p>
+
+                <form id="poilive2d-import-form"
+                    method="post"
+                    action="<?php echo esc_url(admin_url('admin-post.php')); ?>"
+                    enctype="multipart/form-data"
+                    style="margin-top: 8px;">
+
+                    <input type="hidden" name="action" value="poilive2d_import_settings">
+
+                    <?php wp_nonce_field('poilive2d_import_settings', 'poilive2d_import_nonce'); ?>
+
+                    <div style="display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap;">
+                        <button type="submit" class="button button-secondary">
+                            导入完整配置
+                        </button>
+
+                        <input type="file"
+                            id="poilive2d-import-file"
+                            name="poilive2d_import_file"
+                            accept=".json,application/json"
+                            style="position: relative; top: 3px;">
+                    </div>
+                </form>
+            </div>
+
+            <div style="margin-top: 18px;">
+                <button type="button" class="button" id="poilive2d-close-import-export">
+                    关闭
+                </button>
+            </div>
+        </div>
     </div>
-    <input type="submit" class="button-primary" value="保存设置" style="margin: 20px 0;" /> 
-    <br><br> PoiLive2D·Wordpress 原版插件作者：<a href="https://daidr.me" target="_blank">戴兜</a> &nbsp; <a href="https://daidr.me/archives/code-176.html" target="_blank" >最新版v1.06</a> 说明&下载页 
-	<br><br> PoiLive2D·Wordpress 洛天依版插件作者：<a href="https://unsignedzhang.cn/" target="_blank">unsigned</a> &nbsp; <a href="https://unsignedzhang.cn/luotianyi-live2d/" target="_blank" >最新版v1.10</a> 说明&下载页
-    <br><br> PoiLive2D·Wordpress 魔改版插件作者：<a href="https://omega.im/63/" target="_blank">电波万事屋</a> &nbsp; <a href="https://www.omega.im/63/" target="_blank" >最新版v0.9.A</a>说明&下载页<br><br> PoiLive2D·Wordpress 新·洛天依版 版本 <?php echo LIVE2D_VERSION; ?> &nbsp; 插件作者:<a href="https://www.luotianyi.blue/" target="_blank">虎啸ROAR</a> &nbsp; <a href="https://www.luotianyi.blue/2023-06/new·luotianyi-live2d.html" target="_blank" >最新版本及说明</a>
-</form>
 
-<?php
-function live2d_options_update()
-{
-    update_option('live2d_maincolor', $_POST['main-color']);
-    update_option('live2d_bgcolor', $_POST['bg-color']);
-    update_option('live2d_fontcolor', $_POST['font-color']);
-    
-    if ($_POST['no-hitokoto'] == 'on') {
-        $display = 'checked';
-    } else {
-        $display = '';
-    }
-    update_option('live2d_nohitokoto', $display);
+    <div id="poilive2d-live-preview" style="display: none;">
+        <div class="preview-header">
+            <b>样式实时预览</b>
+            <span style="font-size: 12px; font-weight: normal; color: #666;"> (仅供排版与色彩参考)</span>
+        </div>
 
-    if ($_POST['no-specialtip'] == 'on') {
-        $display = 'checked';
-    } else {
-        $display = '';
-    }
-    update_option('live2d_nospecialtip', $display);
+        <div class="preview-canvas" id="preview-landlord">
 
-    if ($_POST['no-catalog'] == 'on') {
-        $display = 'checked';
-    } else {
-        $display = '';
-    }
-    update_option('live2d_nocatalog', $display);
-	
-    if ($_POST['localkoto'] == 'on') {
-        $display = 'checked';
-    } else {
-        $display = '';
-    }
-    update_option('live2d_localkoto', $display);
-	update_option('live2d_customkoto', stripslashes($_POST['custom-koto']));
-    update_option('live2d_custommsg', stripslashes($_POST['custom-msg']));
-}
-?>
+            <div class="preview-message" id="preview-bubble">
+                一条测试用气泡消息，<span class="preview-highlight">包含高亮文字</span>，用来实时预览你当前的样式排版哦~
+            </div>
+
+            <div class="preview-model-placeholder">人物模型展示区</div>
+
+            <ul class="preview-menu-right">
+                <li class="preview-action">变身</li>
+                <li class="preview-action">变装</li>
+            </ul>
+
+            <div class="preview-corner-tools">
+                <div class="preview-corner-btn">✥</div>
+                <div class="preview-corner-btn">⚙️</div>
+            </div>
+        </div>
+    </div>
+</div>
